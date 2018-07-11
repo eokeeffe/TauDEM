@@ -75,7 +75,7 @@ int readline(FILE *fp, char *fline)
 }
 
 
-int setregion(char *fdrfile, char *regiongwfile, char *newfile, long regionID)
+int setregion(char *fdrfile, char *regiongwfile, char *newfile, int32_t regionID)
 {
 	MPI_Init(NULL,NULL);{
 
@@ -119,6 +119,7 @@ int setregion(char *fdrfile, char *regiongwfile, char *newfile, long regionID)
 	tiffIO gwIO(regiongwfile, LONG_TYPE);
 	if (!fdrIO.compareTiff(gwIO)) {
 			printf("File sizes do not match\n%s\n", regiongwfile);
+			fflush(stdout);
 			MPI_Abort(MCW, 5);
 			return 1;
 	}

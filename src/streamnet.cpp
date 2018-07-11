@@ -93,6 +93,16 @@ OGRSpatialReferenceH  hSRSraster,hSRSshapefile;
 //	doutmidIdx = DBFAddField(dbf1,"DOUT_MID",FTDouble,16,1);
 //}
 
+//returns true iff cell at [nrow][ncol] points to cell at [row][col]
+bool pointsToMe(long col, long row, long ncol, long nrow, tdpartition *dirData) {
+	short d;
+	if (!dirData->hasAccess(ncol, nrow) || dirData->isNodata(ncol, nrow)) { return false; }
+	d = dirData->getData(ncol, nrow, d);
+	if (nrow + d2[d] == row && ncol + d1[d] == col) {
+		return true;
+	}
+	return false;
+}
 
 void createStreamNetShapefile(char *streamnetsrc,char *streamnetlyr,OGRSpatialReferenceH hSRSraster){
    
@@ -404,6 +414,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
 		tiffIO dirIO(pfile, SHORT_TYPE);
 		if(!dirIO.compareTiff(srcIO)){
 			printf("pfile and src files not the same size. Exiting \n");
+			fflush(stdout);
 			MPI_Abort(MCW,4);
 		}
 		//Create partition and read data
@@ -415,6 +426,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
 		tiffIO ad8IO(ad8file, FLOAT_TYPE);
 		if(!ad8IO.compareTiff(srcIO)){
 			printf("ad8file and src files not the same size. Exiting \n");
+			fflush(stdout);
 			MPI_Abort(MCW,4);
 		}
 		//Create partition and read data
@@ -425,6 +437,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
 		tiffIO elevIO(elevfile, FLOAT_TYPE);
 		if(!elevIO.compareTiff(srcIO)){
 			printf("elevfile and src files not the same size. Exiting \n");
+			fflush(stdout);
 			MPI_Abort(MCW,4);
 		}
 		//Create partition and read data
@@ -456,7 +469,8 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
 		if( useOutlets == 1) {
 			if(rank==0){
 				if(readoutlets(outletsds,lyrname,uselayername,lyrno,hSRSraster, &numOutlets, x, y,ids) !=0){
-					printf("Exiting \n");
+					printf("Read outlets error. Exiting \n");
+					fflush(stdout);
 					MPI_Abort(MCW,5);
 				}else {
 					MPI_Bcast(&numOutlets, 1, MPI_INT, 0, MCW);
@@ -939,6 +953,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
         		MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MCW, &messageFlag, &stat);
        		 	if(messageFlag == true){
                 		cout << rank << ": I have a message waiting before I try to pass links!!!" << stat.MPI_TAG << endl;
+						fflush(stdout);
                 		MPI_Abort(MCW,4);
         		}
 				MPI_Barrier(MCW);
@@ -1060,6 +1075,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
             MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MCW, &messageFlag, &stat);
             if(messageFlag == true){
                     cout << rank << ": I have failed to received a message!!!" << endl;
+					fflush(stdout);
                     MPI_Abort(MCW,2);
             }
 			MPI_Barrier(MCW);
@@ -1283,6 +1299,7 @@ int netsetup(char *pfile,char *srcfile,char *ordfile,char *ad8file,char *elevfil
 			MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MCW, &messageFlag, &stat);
 			if(messageFlag == true){
 					cout << rank << ": I have failed to received a message!!!" << endl;
+					fflush(stdout);
 					MPI_Abort(MCW,1);
 			}
 			MPI_Barrier(MCW);

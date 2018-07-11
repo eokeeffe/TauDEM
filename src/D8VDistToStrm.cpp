@@ -1,14 +1,14 @@
-/*  D8HDistToStrm
+/*  D8VDistToStrm
 
-  This function computes the distance from each grid cell moving downstream until a stream 
+  This function computes the vertical distance from each grid cell moving downstream until a stream 
   grid cell as defined by the Stream Raster grid is encountered.  The optional threshold 
   input is to specify a threshold to be applied to the Stream Raster grid (src).  
   Stream grid cells are defined as having src value >= the threshold, or >=1 if a 
   threshold is not specified.
 
-  David Tarboton
-  Utah State University  
-  May 23, 2010 
+  Xing Zheng, David G Tarboton
+  University of Texas at Austin, Utah State University
+  July 02, 2017
   
 */
 
@@ -53,22 +53,25 @@ email:  dtarb@usu.edu
 #include "tiffIO.h"
 
 using namespace std;
+float **dist;
 
-int distgrid(char *pfile, char *srcfile, char *distfile, int thresh)
+int d8vdistdown(char *pfile, char *felfile, char *srcfile, char *distfile, int thresh)
 {
 MPI_Init(NULL,NULL);
-{  //  All code within braces so that objects go out of context and destruct before MPI is closed
+{   //  All code within braces so that objects go out of context and destruct before MPI is closed
 	int rank,size;
 	MPI_Comm_rank(MCW,&rank);
 	MPI_Comm_size(MCW,&size);
-	if(rank==0)printf("D8HDistToStrm version %s\n",TDVERSION);
+	if(rank==0)printf("D8VDistToStrm version %s\n",TDVERSION);
+
 	int i,j,in,jn;
+	float tempEle, tempEleDown;
 	float tempFloat; double tempdxc,tempdyc;
 	short tempShort,k;
 	int32_t tempLong;
 	bool finished;
 
- //  Begin timer
+    //  Begin timer
     double begint = MPI_Wtime();
 
 	//Read Flow Direction header using tiffIO
@@ -97,12 +100,24 @@ MPI_Init(NULL,NULL);
 	p->savedxdyc(pf);
 	pf.read(xstart, ystart, ny, nx, p->getGridPointer());
 
+	//  Elevation data
+	tdpartition *fel;
+	tiffIO felf(felfile, FLOAT_TYPE);
+	if (!pf.compareTiff(felf)) {
+		printf("File sizes do not match\n%s\n", felfile);
+		fflush(stdout);
+		MPI_Abort(MCW, 5);
+		return 1;
+	}
+	fel = CreateNewPartition(felf.getDatatype(), totalX, totalY, dxA, dyA, felf.getNodata());
+	fel->savedxdyc(felf);
+	felf.read(xstart, ystart, fel->getny(), fel->getnx(), fel->getGridPointer());
+
  	//Read src file
 	tdpartition *src;
 	tiffIO srcf(srcfile,LONG_TYPE);
 	if(!pf.compareTiff(srcf)) {
 		printf("File sizes do not match\n%s\n",srcfile);
-		fflush(stdout);
 		MPI_Abort(MCW,5);
 		return 1;  //And maybe an unhappy error message
 	}
@@ -115,8 +130,8 @@ MPI_Init(NULL,NULL);
  	//Create empty partition to store distance information
 	tdpartition *fdarr;
 	fdarr = CreateNewPartition(FLOAT_TYPE, totalX, totalY, dxA, dyA, MISSINGFLOAT);
-
-	/*  Calculate Distances  */
+/*
+	//Calculate Distances
 	//float dist[9];
 	float** dist = new float*[ny];
     for(int j = 0; j< ny; j++)
@@ -128,7 +143,7 @@ MPI_Init(NULL,NULL);
 		 dist[m][kk]=sqrt(d1[kk]*d1[kk]*tempdxc*tempdxc+d2[kk]*d2[kk]*tempdyc*tempdyc);
 		 }
 	}
-
+*/
 	//  Set neighbor partition to 1 because all grid cells drain to one other grid cell in D8
 	tdpartition *neighbor;
 	neighbor = CreateNewPartition(SHORT_TYPE, totalX, totalY, dxA, dyA, MISSINGSHORT);
@@ -151,6 +166,7 @@ MPI_Init(NULL,NULL);
 
 	//Share information and set borders to zero
 	p->share();
+	fel->share();
 	src->share();
 	fdarr->share();
 	neighbor->clearBorders();
@@ -172,11 +188,14 @@ MPI_Init(NULL,NULL);
 			else
 			{
 				p->getData(i,j,k);  //  Get neighbor downstream
+				fel->getData(i,j,tempEle);
 				in = i+d1[k];
 				jn = j+d2[k];
-				if(fdarr->isNodata(in,jn))fdarr->setToNodata(i,j);
+				fel->getData(in,jn,tempEleDown);
+				if(fdarr->isNodata(in,jn))
+					fdarr->setToNodata(i,j);
 				else
-					fdarr->setData(i,j,(float)(dist[j][k]+fdarr->getData(in,jn,tempFloat)));
+					fdarr->setData(i,j,(float)(tempEle-tempEleDown+fdarr->getData(in,jn,tempFloat)));
 			}
 			//  Now find upslope cells and reduce dependencies
 			for(k=1; k<=8; k++) {
